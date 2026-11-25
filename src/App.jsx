@@ -15,7 +15,7 @@ const games = [
 // ===== EVENT SETTINGS (edit these) =====
 
 // true = waiting list shows "Coming soon" and signups are off. false = signups are open.
-const WAITLIST_COMING_SOON = false
+const WAITLIST_COMING_SOON = true
 
 // Dates people can book, in YYYY-MM-DD format (1-3 dates). The day name is added automatically.
 const BOOKING_DATES = ['2026-11-28', '2026-11-29', '2026-11-30']
