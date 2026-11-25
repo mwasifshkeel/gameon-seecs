@@ -14,7 +14,7 @@ const games = [
 
 // ===== EVENT SETTINGS (edit these) =====
 
-// true = waiting list shows "Coming soon" and signups are off. false = signups are open.
+// true = bookings AND waiting list are fully locked (site shows "coming soon"). false = everything open.
 const WAITLIST_COMING_SOON = true
 
 // Dates people can book, in YYYY-MM-DD format (1-3 dates). The day name is added automatically.
@@ -25,7 +25,6 @@ const TIME_SLOTS = ['10:00 AM', '11:00 AM', '12:00 PM', '01:00 PM', '02:00 PM', 
 
 // =======================================
 
-// '2026-11-28' -> 'Saturday, 28 November 2026'
 function formatDate(value) {
   const [year, month, day] = value.split('-').map(Number)
   return new Date(year, month - 1, day).toLocaleDateString('en-GB', {
@@ -33,7 +32,6 @@ function formatDate(value) {
   })
 }
 
-// Today's date in the visitor's local time, as YYYY-MM-DD
 function getToday() {
   const now = new Date()
   const pad = n => String(n).padStart(2, '0')
@@ -57,8 +55,10 @@ function App() {
   const [formError, setFormError] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
+  // Single source of truth: when this is true, EVERY public form is locked.
+  const locked = WAITLIST_COMING_SOON
+
   const selectedGame = useMemo(() => games.find(g => g.id === activeGame), [activeGame])
-  // Dates that have already passed are hidden automatically
   const availableDates = BOOKING_DATES.filter(d => d >= getToday())
 
   useEffect(() => {
@@ -69,6 +69,11 @@ function App() {
   async function submitBooking(e) {
     e.preventDefault()
     setFormError('')
+    // Hard stop: bookings closed.
+    if (locked) {
+      setFormError('Bookings are not open yet. Follow GameOn for the launch announcement.')
+      return
+    }
     if (!isSupabaseConfigured) {
       setFormError('Online submissions are not configured yet. Please try again later or contact the GameOn team.')
       return
@@ -98,8 +103,7 @@ function App() {
   async function submitMember(e) {
     e.preventDefault()
     setFormError('')
-    // Hard stop: the waiting list is closed.
-    if (WAITLIST_COMING_SOON) {
+    if (locked) {
       setFormError('The waiting list is not open yet. Follow GameOn for the launch announcement.')
       return
     }
@@ -127,20 +131,26 @@ function App() {
     setBookingDone(false); setMemberDone(false); setFormError(''); setSubmitting(false)
   }
 
+  // Gate: does nothing when locked.
   function openBooking(game = activeGame) {
+    if (locked) return
     setBooking(b => ({ ...b, game }))
+    setFormError('')
+    setBookingDone(false)
     setBookingOpen(true)
     setMenuOpen(false)
   }
 
-  // Single gate for opening the waiting list. Does nothing while signups are off.
   function openWaitlist() {
-    if (WAITLIST_COMING_SOON) return
+    if (locked) return
     setFormError('')
     setMemberDone(false)
     setWaitlistOpen(true)
     setMenuOpen(false)
   }
+
+  // Reusable style for locked CTAs
+  const lockStyle = { cursor: 'not-allowed', opacity: 0.55 }
 
   const nav = [
     ['The games', '#games'], ['How it works', '#how'], ['Community', '#community']
@@ -149,8 +159,8 @@ function App() {
   return (
     <main>
       <div className="announcement">
-        <span className="live-dot" /> GAMEON / SEECS <span className="announcement-divider">—</span> {WAITLIST_COMING_SOON ? 'WAITING LIST COMING SOON' : 'EARLY ACCESS IS OPEN'}
-        {!WAITLIST_COMING_SOON && <button onClick={openWaitlist}>GET ON THE LIST <ArrowUpRight size={13} /></button>}
+        <span className="live-dot" /> GAMEON / SEECS <span className="announcement-divider">—</span> {locked ? 'BOOKINGS & WAITING LIST COMING SOON' : 'EARLY ACCESS IS OPEN'}
+        {!locked && <button onClick={openWaitlist}>GET ON THE LIST <ArrowUpRight size={13} /></button>}
       </div>
 
       <header className="header wrap">
@@ -160,7 +170,16 @@ function App() {
         </a>
         <nav className={menuOpen ? 'nav nav-open' : 'nav'}>
           {nav.map(([label, href]) => <a key={href} href={href} onClick={() => setMenuOpen(false)}>{label}</a>)}
-          <button className="nav-cta" onClick={() => openBooking()}>Reserve a slot <ArrowUpRight size={15} /></button>
+          <button
+            className="nav-cta"
+            onClick={() => openBooking()}
+            disabled={locked}
+            aria-disabled={locked}
+            style={locked ? lockStyle : undefined}
+            title={locked ? 'Bookings open soon' : undefined}
+          >
+            {locked ? 'Bookings coming soon' : 'Reserve a slot'} <ArrowUpRight size={15} />
+          </button>
         </nav>
         <button className="mobile-menu" aria-label="Toggle menu" onClick={() => setMenuOpen(!menuOpen)}>{menuOpen ? <X /> : <Menu />}</button>
       </header>
@@ -171,7 +190,16 @@ function App() {
           <h1>YOUR<br /><span className="outline-word">MOVE.</span><br /><span className="gradient-word">YOUR</span> GAME.</h1>
           <p className="hero-text">A controller. A rival. One more match. Step up at GameOn and turn a quick game into a proper showdown.</p>
           <div className="hero-actions">
-            <button className="button button-primary" onClick={() => openBooking()}>Pre-book a slot <ArrowUpRight size={17} /></button>
+            <button
+              className="button button-primary"
+              onClick={() => openBooking()}
+              disabled={locked}
+              aria-disabled={locked}
+              style={locked ? lockStyle : undefined}
+              title={locked ? 'Bookings open soon' : undefined}
+            >
+              {locked ? 'Bookings coming soon' : 'Pre-book a slot'} <ArrowUpRight size={17} />
+            </button>
             <a className="text-link" href="#games">Explore the games <ArrowDownRight size={16} /></a>
           </div>
           <div className="hero-meta">
@@ -218,17 +246,46 @@ function App() {
               </div>
               <div className="game-card-bottom">
                 <div><span className="game-edition">{game.edition}</span><h3>{game.name}</h3><p>{game.description}</p></div>
-                <button aria-label={`Choose ${game.name}`} onClick={(e) => { e.stopPropagation(); setActiveGame(game.id); openBooking(game.id) }}><ArrowUpRight /></button>
+                <button
+                  aria-label={locked ? 'Bookings coming soon' : `Choose ${game.name}`}
+                  onClick={(e) => { e.stopPropagation(); if (locked) return; setActiveGame(game.id); openBooking(game.id) }}
+                  disabled={locked}
+                  style={locked ? lockStyle : undefined}
+                >
+                  <ArrowUpRight />
+                </button>
               </div>
             </article>
           ))}
         </div>
-        <div className="selection-row"><span><i className="live-dot" /> SELECTED ARENA</span><strong>{selectedGame.name}</strong><button onClick={() => openBooking(activeGame)}>Book this game <ArrowRight size={15} /></button></div>
+        <div className="selection-row">
+          <span><i className="live-dot" /> SELECTED ARENA</span>
+          <strong>{selectedGame.name}</strong>
+          <button
+            onClick={() => openBooking(activeGame)}
+            disabled={locked}
+            style={locked ? lockStyle : undefined}
+          >
+            {locked ? 'Bookings coming soon' : 'Book this game'} <ArrowRight size={15} />
+          </button>
+        </div>
       </section>
 
       <section className="how-section" id="how">
         <div className="wrap how-inner">
-          <div className="how-intro"><div className="eyebrow"><span>03</span><i /> NO COMPLICATED SETUP</div><h2>THREE STEPS.<br /><span className="gradient-word">GAME ON.</span></h2><p>Getting into the game should be easier than winning it.</p><button className="button button-primary" onClick={() => openBooking()}>Find your slot <ArrowUpRight size={16} /></button></div>
+          <div className="how-intro">
+            <div className="eyebrow"><span>03</span><i /> NO COMPLICATED SETUP</div>
+            <h2>THREE STEPS.<br /><span className="gradient-word">GAME ON.</span></h2>
+            <p>Getting into the game should be easier than winning it.</p>
+            <button
+              className="button button-primary"
+              onClick={() => openBooking()}
+              disabled={locked}
+              style={locked ? lockStyle : undefined}
+            >
+              {locked ? 'Bookings coming soon' : 'Find your slot'} <ArrowUpRight size={16} />
+            </button>
+          </div>
           <div className="steps">
             <div className="step"><span className="step-number">01</span><div><h3>Pick your game</h3><p>Choose between Tekken and EA SPORTS FC. Decide what kind of matchup you're in the mood for.</p></div><Gamepad2 /></div>
             <div className="step"><span className="step-number">02</span><div><h3>Request a time</h3><p>Send your preferred date, time, and player count. We'll confirm availability with you.</p></div><CalendarDays /></div>
@@ -244,7 +301,7 @@ function App() {
             <div className="eyebrow"><span>04</span><i /> THE GAME DOESN'T END HERE</div>
             <h2>GET IN<br />THE <span className="gradient-word">LOBBY.</span></h2>
             <p>Be part of the GameOn community. Get first updates on match days, mini-tournaments, and what's coming next at SEECS.</p>
-            {WAITLIST_COMING_SOON
+            {locked
               ? <button className="button button-light" type="button" disabled aria-disabled="true" style={{ cursor: 'not-allowed', opacity: 0.7 }}>Waiting list coming soon <Clock3 size={17} /></button>
               : <button className="button button-light" onClick={openWaitlist}>Join the early list <ArrowUpRight size={17} /></button>}
           </div>
@@ -262,7 +319,20 @@ function App() {
         <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) closeModal() }}>
           <div className="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
             <button className="modal-close" onClick={closeModal} aria-label="Close"><X /></button>
-            {bookingOpen && !bookingDone && <>
+
+            {/* Locked state — nothing bookable, nothing submittable */}
+            {locked && (
+              <div className="success-state">
+                <div className="success-icon"><Clock3 /></div>
+                <div className="eyebrow"><span>GAMEON / 01</span><i /> NOT OPEN YET</div>
+                <h2>BOOKINGS<br /><span className="gradient-word">COMING SOON.</span></h2>
+                <p>Slot requests and the waiting list are not open yet. Follow GameOn for the launch announcement.</p>
+                <button className="button button-primary" onClick={closeModal}>Back to GameOn <ArrowRight size={16} /></button>
+              </div>
+            )}
+
+            {/* Booking flow — only when unlocked */}
+            {!locked && bookingOpen && !bookingDone && <>
               <div className="eyebrow"><span>BOOK / 01</span><i /> SLOT REQUEST</div>
               <h2 id="modal-title">CALL YOUR<br /><span className="gradient-word">NEXT MATCH.</span></h2>
               <p className="modal-intro">Tell us when you want to play. This sends a request, not a confirmed reservation.</p>
@@ -282,33 +352,23 @@ function App() {
                 {formError && <p className="form-error" role="alert">{formError}</p>}
               </form>
             </>}
-            {bookingOpen && bookingDone && <div className="success-state"><div className="success-icon"><Check /></div><div className="eyebrow"><span>REQUEST SAVED</span><i /></div><h2>YOU'RE<br /><span className="gradient-word">IN THE QUEUE.</span></h2><p>Your request has reached the GameOn database. The team will contact you to confirm availability. Your slot is not confirmed yet.</p><button className="button button-primary" onClick={closeModal}>Back to GameOn <ArrowRight size={16} /></button></div>}
+            {!locked && bookingOpen && bookingDone && <div className="success-state"><div className="success-icon"><Check /></div><div className="eyebrow"><span>REQUEST SAVED</span><i /></div><h2>YOU'RE<br /><span className="gradient-word">IN THE QUEUE.</span></h2><p>Your request has reached the GameOn database. The team will contact you to confirm availability. Your slot is not confirmed yet.</p><button className="button button-primary" onClick={closeModal}>Back to GameOn <ArrowRight size={16} /></button></div>}
 
-            {/* Waiting list CLOSED — no form is rendered at all */}
-            {waitlistOpen && WAITLIST_COMING_SOON && (
-              <div className="success-state">
-                <div className="success-icon"><Clock3 /></div>
-                <div className="eyebrow"><span>COMMUNITY / 01</span><i /> NOT OPEN YET</div>
-                <h2>WAITING LIST<br /><span className="gradient-word">COMING SOON.</span></h2>
-                <p>Signups are not open yet. Follow GameOn for the launch announcement.</p>
-                <button className="button button-primary" onClick={closeModal}>Back to GameOn <ArrowRight size={16} /></button>
-              </div>
-            )}
-
-            {waitlistOpen && !WAITLIST_COMING_SOON && !memberDone && <>
+            {/* Waitlist flow — only when unlocked */}
+            {!locked && waitlistOpen && !memberDone && <>
               <div className="eyebrow"><span>COMMUNITY / 01</span><i /> EARLY ACCESS</div>
               <h2>GET ON<br /><span className="gradient-word">THE LIST.</span></h2>
               <p className="modal-intro">Be first to hear about tournaments, match days, and GameOn updates.</p>
               <form onSubmit={submitMember}>
-                <label>Your name<input required disabled={WAITLIST_COMING_SOON} value={member.name} onChange={e => setMember({ ...member, name: e.target.value })} placeholder="Name" /></label>
-                <label>Email address<input required type="email" disabled={WAITLIST_COMING_SOON} value={member.email} onChange={e => setMember({ ...member, email: e.target.value })} placeholder="you@example.com" /></label>
-                <label>What do you play?<select disabled={WAITLIST_COMING_SOON} value={member.interest} onChange={e => setMember({ ...member, interest: e.target.value })}><option>Both games</option><option>Tekken</option><option>EA SPORTS FC</option></select></label>
-                <button className="button button-primary form-submit" type="submit" disabled={submitting || WAITLIST_COMING_SOON}>{submitting ? 'Joining...' : 'Join the early list'} <ArrowUpRight size={16} /></button>
+                <label>Your name<input required value={member.name} onChange={e => setMember({ ...member, name: e.target.value })} placeholder="Name" /></label>
+                <label>Email address<input required type="email" value={member.email} onChange={e => setMember({ ...member, email: e.target.value })} placeholder="you@example.com" /></label>
+                <label>What do you play?<select value={member.interest} onChange={e => setMember({ ...member, interest: e.target.value })}><option>Both games</option><option>Tekken</option><option>EA SPORTS FC</option></select></label>
+                <button className="button button-primary form-submit" type="submit" disabled={submitting}>{submitting ? 'Joining...' : 'Join the early list'} <ArrowUpRight size={16} /></button>
                 <small className="form-footnote"><ShieldCheck size={13} /> Your details are sent securely to the GameOn database.</small>
                 {formError && <p className="form-error" role="alert">{formError}</p>}
               </form>
             </>}
-            {waitlistOpen && !WAITLIST_COMING_SOON && memberDone && <div className="success-state"><div className="success-icon"><Check /></div><div className="eyebrow"><span>YOU'RE ON THE LIST</span><i /></div><h2>SEE YOU<br /><span className="gradient-word">IN GAME.</span></h2><p>You have been added to the GameOn early-access list. Watch your inbox for updates.</p><button className="button button-primary" onClick={closeModal}>Let's go <ArrowRight size={16} /></button></div>}
+            {!locked && waitlistOpen && memberDone && <div className="success-state"><div className="success-icon"><Check /></div><div className="eyebrow"><span>YOU'RE ON THE LIST</span><i /></div><h2>SEE YOU<br /><span className="gradient-word">IN GAME.</span></h2><p>You have been added to the GameOn early-access list. Watch your inbox for updates.</p><button className="button button-primary" onClick={closeModal}>Let's go <ArrowRight size={16} /></button></div>}
           </div>
         </div>
       )}
