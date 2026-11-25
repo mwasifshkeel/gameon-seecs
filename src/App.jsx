@@ -12,7 +12,33 @@ const games = [
   { id: 'fc', name: 'EA SPORTS FC', edition: 'FOOTBALL / 1V1', description: 'Pick your side, take the pitch, and settle the rivalry.', accent: 'blue', tag: 'MATCH DAY' },
 ]
 
-const timeSlots = ['10:00 AM', '11:00 AM', '12:00 PM', '01:00 PM', '02:00 PM', '03:00 PM', '04:00 PM', '05:00 PM']
+// ===== EVENT SETTINGS (edit these) =====
+
+// true = waiting list shows "Coming soon" and signups are off. false = signups are open.
+const WAITLIST_COMING_SOON = false
+
+// Dates people can book, in YYYY-MM-DD format (1-3 dates). The day name is added automatically.
+const BOOKING_DATES = ['2026-11-28', '2026-11-29', '2026-11-30']
+
+// Times people can choose. These apply to every date above.
+const TIME_SLOTS = ['10:00 AM', '11:00 AM', '12:00 PM', '01:00 PM', '02:00 PM', '03:00 PM', '04:00 PM', '05:00 PM']
+
+// =======================================
+
+// '2026-11-28' -> 'Saturday, 28 November 2026'
+function formatDate(value) {
+  const [year, month, day] = value.split('-').map(Number)
+  return new Date(year, month - 1, day).toLocaleDateString('en-GB', {
+    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+  })
+}
+
+// Today's date in the visitor's local time, as YYYY-MM-DD
+function getToday() {
+  const now = new Date()
+  const pad = n => String(n).padStart(2, '0')
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
+}
 
 function readStored(key) {
   try { return JSON.parse(localStorage.getItem(key) || '[]') } catch { return [] }
@@ -32,6 +58,8 @@ function App() {
   const [submitting, setSubmitting] = useState(false)
 
   const selectedGame = useMemo(() => games.find(g => g.id === activeGame), [activeGame])
+  // Dates that have already passed are hidden automatically
+  const availableDates = BOOKING_DATES.filter(d => d >= getToday())
 
   useEffect(() => {
     document.body.style.overflow = bookingOpen || waitlistOpen ? 'hidden' : ''
@@ -43,6 +71,10 @@ function App() {
     setFormError('')
     if (!isSupabaseConfigured) {
       setFormError('Online submissions are not configured yet. Please try again later or contact the GameOn team.')
+      return
+    }
+    if (!availableDates.includes(booking.date) || !TIME_SLOTS.includes(booking.time)) {
+      setFormError('Please choose an available date and time.')
       return
     }
     setSubmitting(true)
@@ -65,6 +97,7 @@ function App() {
 
   async function submitMember(e) {
     e.preventDefault()
+    if (WAITLIST_COMING_SOON) return
     setFormError('')
     if (!isSupabaseConfigured) {
       setFormError('Online signups are not configured yet. Please try again later or contact the GameOn team.')
@@ -103,8 +136,8 @@ function App() {
   return (
     <main>
       <div className="announcement">
-        <span className="live-dot" /> GAMEON / SEECS <span className="announcement-divider">—</span> EARLY ACCESS IS OPEN
-        <button onClick={() => setWaitlistOpen(true)}>GET ON THE LIST <ArrowUpRight size={13} /></button>
+        <span className="live-dot" /> GAMEON / SEECS <span className="announcement-divider">—</span> {WAITLIST_COMING_SOON ? 'WAITING LIST COMING SOON' : 'EARLY ACCESS IS OPEN'}
+        {!WAITLIST_COMING_SOON && <button onClick={() => setWaitlistOpen(true)}>GET ON THE LIST <ArrowUpRight size={13} /></button>}
       </div>
 
       <header className="header wrap">
@@ -198,7 +231,9 @@ function App() {
             <div className="eyebrow"><span>04</span><i /> THE GAME DOESN'T END HERE</div>
             <h2>GET IN<br />THE <span className="gradient-word">LOBBY.</span></h2>
             <p>Be part of the GameOn community. Get first updates on match days, mini-tournaments, and what's coming next at SEECS.</p>
-            <button className="button button-light" onClick={() => setWaitlistOpen(true)}>Join the early list <ArrowUpRight size={17} /></button>
+            {WAITLIST_COMING_SOON
+              ? <button className="button button-light" type="button" disabled style={{ cursor: 'default', opacity: 0.7 }}>Waiting list coming soon <Clock3 size={17} /></button>
+              : <button className="button button-light" onClick={() => setWaitlistOpen(true)}>Join the early list <ArrowUpRight size={17} /></button>}
           </div>
           <div className="community-stamp"><Users size={22} /><span>GAMEON<br />COMMUNITY</span><b>SEECS / 26</b></div>
         </div>
@@ -226,10 +261,10 @@ function App() {
                   <label>Players<select value={booking.players} onChange={e => setBooking({ ...booking, players: e.target.value })}><option value="1">1 player</option><option value="2">2 players</option><option value="3">3 players</option><option value="4">4 players</option></select></label>
                 </div>
                 <div className="form-row">
-                  <label>Date<input type="date" required min={new Date().toISOString().split('T')[0]} value={booking.date} onChange={e => setBooking({ ...booking, date: e.target.value })} /></label>
-                  <label>Preferred time<select required value={booking.time} onChange={e => setBooking({ ...booking, time: e.target.value })}><option value="">Choose time</option>{timeSlots.map(t => <option key={t}>{t}</option>)}</select></label>
+                  <label>Date<select required value={booking.date} onChange={e => setBooking({ ...booking, date: e.target.value })}><option value="">{availableDates.length ? 'Choose date' : 'No dates available'}</option>{availableDates.map(d => <option key={d} value={d}>{formatDate(d)}</option>)}</select></label>
+                  <label>Preferred time<select required value={booking.time} onChange={e => setBooking({ ...booking, time: e.target.value })}><option value="">Choose time</option>{TIME_SLOTS.map(t => <option key={t} value={t}>{t}</option>)}</select></label>
                 </div>
-                <button className="button button-primary form-submit" type="submit" disabled={submitting}>{submitting ? 'Sending...' : 'Send slot request'} <ArrowUpRight size={16} /></button>
+                <button className="button button-primary form-submit" type="submit" disabled={submitting || availableDates.length === 0}>{submitting ? 'Sending...' : 'Send slot request'} <ArrowUpRight size={16} /></button>
                 <small className="form-footnote"><ShieldCheck size={13} /> Your request is sent securely to GameOn. A request is not a confirmed booking.</small>
                 {formError && <p className="form-error" role="alert">{formError}</p>}
               </form>
