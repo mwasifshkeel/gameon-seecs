@@ -28,3 +28,22 @@ export async function getSupabaseRows(table) {
   if (!response.ok) throw new Error(`Database request failed for ${table}`)
   return response.json()
 }
+
+export async function updateSupabaseRow(table, id, patch) {
+  const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !key) throw new Error('Server database environment variables are missing')
+  const response = await fetch(`${url}/rest/v1/${table}?id=eq.${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+      'Content-Type': 'application/json',
+      Prefer: 'return=representation',
+    },
+    body: JSON.stringify(patch),
+  })
+  if (!response.ok) throw new Error(`Database update failed for ${table}`)
+  const rows = await response.json()
+  return rows[0] || null
+}

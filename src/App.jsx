@@ -97,8 +97,12 @@ function App() {
 
   async function submitMember(e) {
     e.preventDefault()
-    if (WAITLIST_COMING_SOON) return
     setFormError('')
+    // Hard stop: the waiting list is closed.
+    if (WAITLIST_COMING_SOON) {
+      setFormError('The waiting list is not open yet. Follow GameOn for the launch announcement.')
+      return
+    }
     if (!isSupabaseConfigured) {
       setFormError('Online signups are not configured yet. Please try again later or contact the GameOn team.')
       return
@@ -129,6 +133,15 @@ function App() {
     setMenuOpen(false)
   }
 
+  // Single gate for opening the waiting list. Does nothing while signups are off.
+  function openWaitlist() {
+    if (WAITLIST_COMING_SOON) return
+    setFormError('')
+    setMemberDone(false)
+    setWaitlistOpen(true)
+    setMenuOpen(false)
+  }
+
   const nav = [
     ['The games', '#games'], ['How it works', '#how'], ['Community', '#community']
   ]
@@ -137,7 +150,7 @@ function App() {
     <main>
       <div className="announcement">
         <span className="live-dot" /> GAMEON / SEECS <span className="announcement-divider">—</span> {WAITLIST_COMING_SOON ? 'WAITING LIST COMING SOON' : 'EARLY ACCESS IS OPEN'}
-        {!WAITLIST_COMING_SOON && <button onClick={() => setWaitlistOpen(true)}>GET ON THE LIST <ArrowUpRight size={13} /></button>}
+        {!WAITLIST_COMING_SOON && <button onClick={openWaitlist}>GET ON THE LIST <ArrowUpRight size={13} /></button>}
       </div>
 
       <header className="header wrap">
@@ -232,8 +245,8 @@ function App() {
             <h2>GET IN<br />THE <span className="gradient-word">LOBBY.</span></h2>
             <p>Be part of the GameOn community. Get first updates on match days, mini-tournaments, and what's coming next at SEECS.</p>
             {WAITLIST_COMING_SOON
-              ? <button className="button button-light" type="button" disabled style={{ cursor: 'default', opacity: 0.7 }}>Waiting list coming soon <Clock3 size={17} /></button>
-              : <button className="button button-light" onClick={() => setWaitlistOpen(true)}>Join the early list <ArrowUpRight size={17} /></button>}
+              ? <button className="button button-light" type="button" disabled aria-disabled="true" style={{ cursor: 'not-allowed', opacity: 0.7 }}>Waiting list coming soon <Clock3 size={17} /></button>
+              : <button className="button button-light" onClick={openWaitlist}>Join the early list <ArrowUpRight size={17} /></button>}
           </div>
           <div className="community-stamp"><Users size={22} /><span>GAMEON<br />COMMUNITY</span><b>SEECS / 26</b></div>
         </div>
@@ -270,20 +283,32 @@ function App() {
               </form>
             </>}
             {bookingOpen && bookingDone && <div className="success-state"><div className="success-icon"><Check /></div><div className="eyebrow"><span>REQUEST SAVED</span><i /></div><h2>YOU'RE<br /><span className="gradient-word">IN THE QUEUE.</span></h2><p>Your request has reached the GameOn database. The team will contact you to confirm availability. Your slot is not confirmed yet.</p><button className="button button-primary" onClick={closeModal}>Back to GameOn <ArrowRight size={16} /></button></div>}
-            {waitlistOpen && !memberDone && <>
+
+            {/* Waiting list CLOSED — no form is rendered at all */}
+            {waitlistOpen && WAITLIST_COMING_SOON && (
+              <div className="success-state">
+                <div className="success-icon"><Clock3 /></div>
+                <div className="eyebrow"><span>COMMUNITY / 01</span><i /> NOT OPEN YET</div>
+                <h2>WAITING LIST<br /><span className="gradient-word">COMING SOON.</span></h2>
+                <p>Signups are not open yet. Follow GameOn for the launch announcement.</p>
+                <button className="button button-primary" onClick={closeModal}>Back to GameOn <ArrowRight size={16} /></button>
+              </div>
+            )}
+
+            {waitlistOpen && !WAITLIST_COMING_SOON && !memberDone && <>
               <div className="eyebrow"><span>COMMUNITY / 01</span><i /> EARLY ACCESS</div>
               <h2>GET ON<br /><span className="gradient-word">THE LIST.</span></h2>
               <p className="modal-intro">Be first to hear about tournaments, match days, and GameOn updates.</p>
               <form onSubmit={submitMember}>
-                <label>Your name<input required value={member.name} onChange={e => setMember({ ...member, name: e.target.value })} placeholder="Name" /></label>
-                <label>Email address<input required type="email" value={member.email} onChange={e => setMember({ ...member, email: e.target.value })} placeholder="you@example.com" /></label>
-                <label>What do you play?<select value={member.interest} onChange={e => setMember({ ...member, interest: e.target.value })}><option>Both games</option><option>Tekken</option><option>EA SPORTS FC</option></select></label>
-                <button className="button button-primary form-submit" type="submit" disabled={submitting}>{submitting ? 'Joining...' : 'Join the early list'} <ArrowUpRight size={16} /></button>
+                <label>Your name<input required disabled={WAITLIST_COMING_SOON} value={member.name} onChange={e => setMember({ ...member, name: e.target.value })} placeholder="Name" /></label>
+                <label>Email address<input required type="email" disabled={WAITLIST_COMING_SOON} value={member.email} onChange={e => setMember({ ...member, email: e.target.value })} placeholder="you@example.com" /></label>
+                <label>What do you play?<select disabled={WAITLIST_COMING_SOON} value={member.interest} onChange={e => setMember({ ...member, interest: e.target.value })}><option>Both games</option><option>Tekken</option><option>EA SPORTS FC</option></select></label>
+                <button className="button button-primary form-submit" type="submit" disabled={submitting || WAITLIST_COMING_SOON}>{submitting ? 'Joining...' : 'Join the early list'} <ArrowUpRight size={16} /></button>
                 <small className="form-footnote"><ShieldCheck size={13} /> Your details are sent securely to the GameOn database.</small>
                 {formError && <p className="form-error" role="alert">{formError}</p>}
               </form>
             </>}
-            {waitlistOpen && memberDone && <div className="success-state"><div className="success-icon"><Check /></div><div className="eyebrow"><span>YOU'RE ON THE LIST</span><i /></div><h2>SEE YOU<br /><span className="gradient-word">IN GAME.</span></h2><p>You have been added to the GameOn early-access list. Watch your inbox for updates.</p><button className="button button-primary" onClick={closeModal}>Let's go <ArrowRight size={16} /></button></div>}
+            {waitlistOpen && !WAITLIST_COMING_SOON && memberDone && <div className="success-state"><div className="success-icon"><Check /></div><div className="eyebrow"><span>YOU'RE ON THE LIST</span><i /></div><h2>SEE YOU<br /><span className="gradient-word">IN GAME.</span></h2><p>You have been added to the GameOn early-access list. Watch your inbox for updates.</p><button className="button button-primary" onClick={closeModal}>Let's go <ArrowRight size={16} /></button></div>}
           </div>
         </div>
       )}
